@@ -4,7 +4,12 @@
     "ndn-js-sdk": "^0.19.0",
     "node-fetch": "^2.6.0"
   },
+  "bin" : "./src/connector.js",
   "scripts": {
-    "start": "node src/connector.js"
- }
+    "start": "node src/connector.js",
+    "pkg": "pkg . --out-path=dist/"
+  },
+  "devDependencies": {
+    "pkg": "^4.4.0"
+  }
 }
