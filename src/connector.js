@@ -1,21 +1,3 @@
-/*
- * Copyright (C) 2014-2019 Regents of the University of California.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * A copy of the GNU Lesser General Public License is in the file COPYING.
- */
-
 const {
     Face,
     Name,
@@ -25,12 +7,13 @@ const {
     SafeBag,
     KeyChain
 } = require('ndn-js-sdk')
+
 const fs = require('fs')
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
-const fetch = require('node-fetch')
+const config = require('config');
 
-const DEFAULT_RSA_PUBLIC_KEY_DER = new Buffer([
+var DEFAULT_RSA_PUBLIC_KEY_DER = new Buffer([
     0x30, 0x82, 0x01, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01,
     0x01, 0x05, 0x00, 0x03, 0x82, 0x01, 0x0f, 0x00, 0x30, 0x82, 0x01, 0x0a, 0x02, 0x82, 0x01, 0x01,
     0x00, 0xb8, 0x09, 0xa7, 0x59, 0x82, 0x84, 0xec, 0x4f, 0x06, 0xfa, 0x1c, 0xb2, 0xe1, 0x38, 0x93,
@@ -53,7 +36,7 @@ const DEFAULT_RSA_PUBLIC_KEY_DER = new Buffer([
 ]);
 
 // Use an unencrypted PKCS #8 PrivateKeyInfo.
-const DEFAULT_RSA_PRIVATE_KEY_DER = new Buffer([
+var DEFAULT_RSA_PRIVATE_KEY_DER = new Buffer([
     0x30, 0x82, 0x04, 0xbf, 0x02, 0x01, 0x00, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7,
     0x0d, 0x01, 0x01, 0x01, 0x05, 0x00, 0x04, 0x82, 0x04, 0xa9, 0x30, 0x82, 0x04, 0xa5, 0x02, 0x01,
     0x00, 0x02, 0x82, 0x01, 0x01, 0x00, 0xb8, 0x09, 0xa7, 0x59, 0x82, 0x84, 0xec, 0x4f, 0x06, 0xfa,
@@ -133,110 +116,116 @@ const DEFAULT_RSA_PRIVATE_KEY_DER = new Buffer([
     0xcb, 0xea, 0x8f
 ]);
 
-const Echo = function Echo(keyChain, face) {
+var Echo = function Echo(keyChain, face) {
     this.keyChain = keyChain;
     this.face = face;
 };
 
-function distinctArr(arr) {
-    arr = arr.sort()
-    let result = [arr[0]]
+configs = get_configs()
 
-    for (let i = 1, len = arr.length; i < len; i++) {
-        arr[i] !== arr[i - 1] && result.push(arr[i])
-    }
-    return result
-}
 Echo.prototype.onInterest = async function (prefix, interest, face, interestFilterId, filter) {
-    // Make and sign a Data packet.
-    const that = this
-    const data = new Data(interest.getName());
-    // info request : /bfs/info/afid/xxxxx
+
+    // query request : /bfs/query/[fid_format]/[fid]
+    // sample : node consumer.js /bfs/query/afid/1e00000000006ea783fa41d12695d061fb0a0c265c28c6478fb36d4d724ece0369592f940dc1d4c2198399736c025130e30dcf7c582033e1f2bc51fd727b5c47
     const str = interest.getName().toUri()
-    console.log(str)
-    let afid = str.indexOf('/afid/') === -1 ? '' : (str.split('/afid/'))[1]
-    if (afid.indexOf('.') !== -1) {
-        blockId = parseInt((afid.split('.'))[1])
-        afid = (afid.split('.'))[0]
-    }
-    //const rs = fs.readFileSync(`${__dirname}/../config.json`)
-    const config = JSON.parse(rs)
-    const path = config.path
-    const port = config.port
-    const method = config.method
-    const x64cmd = `cd ${path};\
-    ./afs-x64 \";_f=query;afid=${afid};\";`
-    const arfs_x64cmd = `cd ${path};\
-    ./afs-x64 \";_f=arfs_query;afid=${afid};\";`
-    const x86cmd = `cd ${path};\
-    ./afs-x86 \";_f=query;afid=${afid};\";`
-    let res = ''
-    if (method === 'network') {
-        console.log('using netowrk')
-        const r = await fetch(`http://localhost:${port}/v1/un/exists/file?afid=${afid}`)
-        res = await r.json()
-        if (!res.is_exists) {
-            return
-        }
-    } else {
-        try {
-            const out = await exec(arfs_x64cmd)
-            res = out.stdout
-        } catch {
-            const out = await exec(x86cmd)
-            res = out.stdout
-        }
 
-        if (res.indexOf('is_exist=true') === -1) {
-            return
-        }
+    if (str.indexOf('/query/') === -1)
+        return
+
+    console.log("Interest Packaet URI - " + str);
+
+    var query = {
+        fid_format : (str.split('/'))[3],
+        fid : (str.split('/'))[4]
     }
 
-    if ((str.split('/'))[2] === 'info') {
-        let obj = {}
-        //obj.result = res
-        console.log('----config----')
-        console.log(config)
-        console.log('-----------')
-        obj = config
-        data.setContent(JSON.stringify(obj));
-        that.keyChain.sign(data);
+    // Make and sign a Data packet.
+    var data = new Data(interest.getName());
 
-        try {
-            face.putData(data);
-        } catch (e) {
-            console.log(e.toString());
-        }
+    // Make a Query Command
+    var cmd = configs.get('afs').get('program_path') +
+        configs.get('afs').get('program_name') + " \"" +
+        ";_f=query" +
+        ";" + query.fid_format + "=" + query.fid
+    cmd += ";\""
+    console.log("Issue Command - " + cmd);
+    const out = await exec(cmd)
+    res = out.stdout
+
+    res = res.replace(/(\r\n|\n|\r)/gm, "");
+    console.log("Command Result - " + res);
+
+    // Not Return any data packet if fs return false
+    if ((res.indexOf('is_exist=true') === -1 && !(query.fid_format === "gfid")) || res.indexOf('_r=true') === -1) {
+        return
     }
+    var query_result = {
+        afid: get_afid(res),
+        field: get_field(res),
+        address: configs.get("rnode").get("address")
+    };
 
+    var content = JSON.stringify(query_result);
+    data.setContent(content);
+    this.keyChain.sign(data);
 
+    try {
+        console.log("Data Packet - " + content);
+        face.putData(data);
+    } catch (e) {
+        console.log(e.toString());
+    }
+    console.log("\n");
+};
+
+function get_afid(res) {
+    const afid_field = ";afid="
+    if (res.indexOf(afid_field) === -1)
+        return ""
+    const start_ind = res.indexOf(afid_field) + afid_field.length
+    const end_ind = start_ind + 128
+    return res.substring(start_ind, end_ind)
+};
+
+function get_field(res) {
+    const field = ";field="
+    if (res.indexOf(field) === -1)
+        return ""
+    const start_ind = res.indexOf(field) + field.length
+    const end_ind = res.indexOf(";", start_ind)
+    return res.substring(start_ind, end_ind)
 };
 
 Echo.prototype.onRegisterFailed = function (prefix) {
     console.log("Register failed for prefix " + prefix.toUri());
-    this.face.close(); // This will cause the script to quit.
+    this.face.close();  // This will cause the script to quit.
 };
 
-function main() {
+function get_configs() {
+    return config.get('connector')
+}
 
+function main(configs) {
     // Connect to the local forwarder with a Unix socket.
-    const face = new Face(new UnixTransport());
+    var face = new Face(new UnixTransport());
 
     // For now, when setting face.setCommandSigningInfo, use a key chain with
     //   a default private key instead of the system default key chain. This
     //   is OK for now because NFD is configured to skip verification, so it
     //   ignores the system default key chain.
-    const keyChain = new KeyChain("pib-memory:", "tpm-memory:");
-    keyChain.importSafeBag(new SafeBag(new Name("/testname/KEY/123"),
-        new Blob(DEFAULT_RSA_PRIVATE_KEY_DER, false),
-        new Blob(DEFAULT_RSA_PUBLIC_KEY_DER, false)));
+    var keyChain = new KeyChain("pib-memory:", "tpm-memory:");
+    keyChain.importSafeBag(new SafeBag
+        (new Name("/testname/KEY/123"),
+            new Blob(DEFAULT_RSA_PRIVATE_KEY_DER, false),
+            new Blob(DEFAULT_RSA_PUBLIC_KEY_DER, false)));
 
     face.setCommandSigningInfo(keyChain, keyChain.getDefaultCertificateName());
 
-    const echo = new Echo(keyChain, face);
-    const prefix = new Name("/bfs");
+    var echo = new Echo(keyChain, face);
+    var prefix = new Name(configs.get('ndn').get('prefix'));
     console.log("Register prefix " + prefix.toUri());
-    face.registerPrefix(prefix, echo.onInterest.bind(echo), echo.onRegisterFailed.bind(echo));
+    face.registerPrefix
+        (prefix, echo.onInterest.bind(echo), echo.onRegisterFailed.bind(echo));
 }
-var rs = fs.readFileSync(`${__dirname}/../config.json`)
-main();
+
+main(configs);
