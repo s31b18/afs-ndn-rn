@@ -125,7 +125,7 @@ configs = get_configs()
 
 Echo.prototype.onInterest = async function (prefix, interest, face, interestFilterId, filter) {
 
-    // query request : /bfs/query/[fid_format]/[fid]
+    // query request : /bfs/[arfs/afs]/query/[fid_format]/[fid]/
     // sample : node consumer.js /bfs/query/afid/1e00000000006ea783fa41d12695d061fb0a0c265c28c6478fb36d4d724ece0369592f940dc1d4c2198399736c025130e30dcf7c582033e1f2bc51fd727b5c47
     const str = interest.getName().toUri()
 
@@ -135,8 +135,9 @@ Echo.prototype.onInterest = async function (prefix, interest, face, interestFilt
     console.log("Interest Packaet URI - " + str);
 
     var query = {
-        fid_format : (str.split('/'))[3],
-        fid : (str.split('/'))[4]
+        fs_type : (str.split('/'))[2],
+        fid_format : (str.split('/'))[4],
+        fid : (str.split('/'))[5]
     }
 
     // Make and sign a Data packet.
@@ -146,8 +147,9 @@ Echo.prototype.onInterest = async function (prefix, interest, face, interestFilt
     var cmd = configs.get('afs').get('program_path') +
         configs.get('afs').get('program_name') + " \"" +
         ";_f=query" +
-        ";" + query.fid_format + "=" + query.fid
-    cmd += ";\""
+        ";" + query.fid_format + "=" + query.fid + 
+        ";field=|" + fs_type
+    cmd += "|;\""
     console.log("Issue Command - " + cmd);
     const out = await exec(cmd)
     res = out.stdout
