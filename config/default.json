@@ -8,7 +8,7 @@
       "program_name" : "afs-x64"
     },
     "rnode" : {
-      "address" : "192.168.1.1:8080"
+      "address" : "10.6.71.79:8072"
     }
   }
 }

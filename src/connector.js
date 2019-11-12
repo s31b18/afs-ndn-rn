@@ -158,7 +158,8 @@ Echo.prototype.onInterest = async function (prefix, interest, face, interestFilt
     console.log("Command Result - " + res);
 
     // Not Return any data packet if fs return false
-    if ((res.indexOf('is_exist=true') === -1 && !(query.fid_format === "gfid")) || res.indexOf('_r=true') === -1) {
+    if (res.indexOf("is_exist=true") === -1) {
+        console.log(res.indexOf("is_exist=true"))
         return
     }
     var query_result = {
