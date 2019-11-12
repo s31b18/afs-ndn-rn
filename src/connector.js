@@ -148,7 +148,7 @@ Echo.prototype.onInterest = async function (prefix, interest, face, interestFilt
         configs.get('afs').get('program_name') + " \"" +
         ";_f=query" +
         ";" + query.fid_format + "=" + query.fid + 
-        ";field=|" + fs_type
+        ";field=|" + query.fs_type
     cmd += "|;\""
     console.log("Issue Command - " + cmd);
     const out = await exec(cmd)
